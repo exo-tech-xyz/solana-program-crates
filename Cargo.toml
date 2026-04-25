@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "pinocchio-accounts-struct",
+]
+resolver = "2"
+
+package.version = "0.1.0"
+package.edition = "2021"
+
+[workspace.dependencies]
+pinocchio = "0.10.2"
+pinocchio-token = "0.6.0"
+pinocchio-token-2022 = "0.3.1"
+pinocchio-associated-token-account = "0.4.0"
+pinocchio-log = "0.5.1"
+pinocchio-pubkey = "0.3.0"
+pinocchio-system = "0.6.1"

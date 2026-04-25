@@ -1,0 +1,10 @@
+[package]
+name = "pinocchio-accounts-struct"
+version.workspace = true
+edition.workspace = true
+
+[dev-dependencies]
+pinocchio-log = { workspace = true }
+
+[dependencies]
+pinocchio = { workspace = true }
