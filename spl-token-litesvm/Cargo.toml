@@ -5,5 +5,7 @@ edition = { workspace = true }
 
 [dependencies]
 litesvm = { workspace = true }
-solana-sdk = { workspace = true }
-spl-token-2022 = { workspace = true, features = ["no-entrypoint"] }
+solana-account = { workspace = true }
+solana-program-pack = { workspace = true }
+solana-pubkey = { workspace = true }
+spl-token-2022-interface = { workspace = true }
