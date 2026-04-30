@@ -7,7 +7,6 @@ pub use pinocchio_token_2022::instructions;
 const EXTENSION_TYPE_LEN: usize = 2;
 const EXTENSION_LENGTH_LEN: usize = 2;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExtensionType {
     TransferFeeConfig,
@@ -78,9 +77,7 @@ impl<'info> TokenAccount<'info> {
             // SAFETY: Token and Token2022 Account structs have compatible layouts.
             Ok(TokenAccount(Ref::map(
                 account_view.try_borrow()?,
-                |data| unsafe {
-                    pinocchio_token_2022::state::Account::from_bytes_unchecked(data)
-                },
+                |data| unsafe { pinocchio_token_2022::state::Account::from_bytes_unchecked(data) },
             )))
         } else {
             Err(ProgramError::InvalidAccountData)
@@ -123,10 +120,9 @@ impl<'info> Mint<'info> {
                 return Err(ProgramError::InvalidAccountData);
             }
             // SAFETY: Token and Token2022 Mint structs have compatible layouts.
-            Ok(Mint(Ref::map(
-                account_view.try_borrow()?,
-                |data| unsafe { pinocchio_token_2022::state::Mint::from_bytes_unchecked(data) },
-            )))
+            Ok(Mint(Ref::map(account_view.try_borrow()?, |data| unsafe {
+                pinocchio_token_2022::state::Mint::from_bytes_unchecked(data)
+            })))
         } else {
             Err(ProgramError::InvalidAccountData)
         }

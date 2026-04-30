@@ -137,7 +137,7 @@ mod tests {
     use pinocchio::{
         account::{RuntimeAccount, NOT_BORROWED},
         error::ProgramError,
-        Address, AccountView,
+        AccountView, Address,
     };
 
     const PROG_ID: [u8; 32] = [1u8; 32];
@@ -159,14 +159,14 @@ mod tests {
         let raw = buf.as_mut_ptr() as *mut RuntimeAccount;
         unsafe {
             (*raw).borrow_state = NOT_BORROWED;
-            (*raw).is_signer    = if is_signer { 1 } else { 0 };
-            (*raw).is_writable  = if is_writable { 1 } else { 0 };
-            (*raw).executable   = 0;
+            (*raw).is_signer = if is_signer { 1 } else { 0 };
+            (*raw).is_writable = if is_writable { 1 } else { 0 };
+            (*raw).executable = 0;
             (*raw).resize_delta = 0;
-            (*raw).address      = Address::new_from_array(address);
-            (*raw).owner        = Address::new_from_array(owner);
-            (*raw).lamports     = 0;
-            (*raw).data_len     = data.len() as u64;
+            (*raw).address = Address::new_from_array(address);
+            (*raw).owner = Address::new_from_array(owner);
+            (*raw).lamports = 0;
+            (*raw).data_len = data.len() as u64;
             if !data.is_empty() {
                 core::ptr::copy_nonoverlapping(
                     data.as_ptr(),
@@ -411,8 +411,8 @@ mod tests {
             program_id: PROG_ID
         }
         let (_b0, v0) = make_account(false, false, [0u8; 32], [0u8; 32], vec![]);
-        let (_b1, v1) = make_account(false, false, KEY_A,     [0u8; 32], vec![]);
-        let (_b2, v2) = make_account(false, false, KEY_B,     [0u8; 32], vec![]);
+        let (_b1, v1) = make_account(false, false, KEY_A, [0u8; 32], vec![]);
+        let (_b2, v2) = make_account(false, false, KEY_B, [0u8; 32], vec![]);
         let accounts = [v0, v1, v2];
         let ctx = Ctx::from_accounts(&accounts).unwrap();
         assert_eq!(ctx.remaining.len(), 2);
