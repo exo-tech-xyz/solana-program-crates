@@ -1,0 +1,14 @@
+[package]
+name = "kamino-litesvm"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+bytemuck = { workspace = true }
+fixed = { workspace = true }
+litesvm = { workspace = true }
+sha2-const-stable = { workspace = true }
+solana-sdk = { workspace = true }
+spl-token = { workspace = true, features = ["no-entrypoint"] }
+spl-token-litesvm = { workspace = true }
+uint = { workspace = true }
