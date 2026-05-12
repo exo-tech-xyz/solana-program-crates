@@ -4,8 +4,15 @@ use solana_account_view::{AccountView, Ref};
 
 pub use pinocchio_token_2022::instructions;
 
+use pinocchio_token_2022::state::Account as T22TokenAccount;
+
 const EXTENSION_TYPE_LEN: usize = 2;
 const EXTENSION_LENGTH_LEN: usize = 2;
+
+/// SPL Token-2022 account-type byte after the 165-byte base state (`AccountType::Mint`).
+const T22_ACCOUNT_TYPE_MINT: u8 = 1;
+/// SPL Token-2022 account-type byte for a token holding account (`AccountType::Account`).
+const T22_ACCOUNT_TYPE_TOKEN_ACCOUNT: u8 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExtensionType {
@@ -39,7 +46,7 @@ impl ExtensionType {
     }
 }
 
-pub struct TokenAccount<'info>(Ref<'info, pinocchio_token_2022::state::Account>);
+pub struct TokenAccount<'info>(Ref<'info, T22TokenAccount>);
 
 /// Size of multisig account for TokenAccount and Mint.
 pub const MULTISIG_ACCOUNT_LENGTH: usize = 355;
@@ -47,8 +54,8 @@ pub const MULTISIG_ACCOUNT_LENGTH: usize = 355;
 /// Get the account type for a T22 account.
 pub fn get_account_type(account_view: &AccountView) -> Result<u8, ProgramError> {
     let data = account_view.try_borrow()?;
-    // AccountType is at byte 165 (Account::BASE_LEN) for extensible T22 accounts.
-    let account_type = data[pinocchio_token_2022::state::Account::BASE_LEN];
+    // Account type is at byte 165 (`T22TokenAccount::BASE_LEN`) for extensible T22 accounts.
+    let account_type = data[T22TokenAccount::BASE_LEN];
     Ok(account_type)
 }
 
@@ -56,10 +63,10 @@ impl<'info> TokenAccount<'info> {
     pub fn from_account_view(account_view: &'info AccountView) -> Result<Self, ProgramError> {
         if account_view.owned_by(&pinocchio_token_2022::ID) {
             let data_len = account_view.data_len();
-            if data_len > pinocchio_token_2022::state::Account::BASE_LEN {
+            if data_len > T22TokenAccount::BASE_LEN {
                 let account_type = get_account_type(account_view)?;
-                // TokenAccount must have account type 2.
-                if account_type != 2 {
+                // Token holding account must have account type 2.
+                if account_type != T22_ACCOUNT_TYPE_TOKEN_ACCOUNT {
                     return Err(ProgramError::InvalidAccountData);
                 }
                 // Multisig accounts are not supported.
@@ -67,17 +74,17 @@ impl<'info> TokenAccount<'info> {
                     return Err(ProgramError::InvalidAccountData);
                 }
             }
-            pinocchio_token_2022::state::Account::from_account_view(account_view)
+            T22TokenAccount::from_account_view(account_view)
                 .map(TokenAccount)
                 .map_err(|_| ProgramError::InvalidAccountData)
         } else if account_view.owned_by(&pinocchio_token::ID) {
             if account_view.data_len() != pinocchio_token::state::Account::LEN {
                 return Err(ProgramError::InvalidAccountData);
             }
-            // SAFETY: Token and Token2022 Account structs have compatible layouts.
+            // SAFETY: Legacy Token and Token-2022 token account structs share the same base layout.
             Ok(TokenAccount(Ref::map(
                 account_view.try_borrow()?,
-                |data| unsafe { pinocchio_token_2022::state::Account::from_bytes_unchecked(data) },
+                |data| unsafe { T22TokenAccount::from_bytes_unchecked(data) },
             )))
         } else {
             Err(ProgramError::InvalidAccountData)
@@ -86,7 +93,7 @@ impl<'info> TokenAccount<'info> {
 }
 
 impl Deref for TokenAccount<'_> {
-    type Target = pinocchio_token_2022::state::Account;
+    type Target = T22TokenAccount;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -99,12 +106,12 @@ impl<'info> Mint<'info> {
     pub fn from_account_view(account_view: &'info AccountView) -> Result<Self, ProgramError> {
         if account_view.owned_by(&pinocchio_token_2022::ID) {
             let data_len = account_view.data_len();
-            // Use Account::BASE_LEN (165) as threshold — that is where the AccountType
+            // Use `T22TokenAccount::BASE_LEN` (165) as threshold — that is where the account-type
             // byte lives for all extensible T22 accounts, including Mints.
-            if data_len > pinocchio_token_2022::state::Account::BASE_LEN {
+            if data_len > T22TokenAccount::BASE_LEN {
                 let account_type = get_account_type(account_view)?;
                 // Mint must have account type 1.
-                if account_type != 1 {
+                if account_type != T22_ACCOUNT_TYPE_MINT {
                     return Err(ProgramError::InvalidAccountData);
                 }
                 // Multisig accounts are not supported.
@@ -140,14 +147,13 @@ impl Deref for Mint<'_> {
 /// Iterate over TLV extension data and return all extension types present.
 /// Works for both Token-2022 Mint and TokenAccount accounts.
 pub fn get_all_extensions(acc_data_bytes: &[u8]) -> Result<Vec<ExtensionType>, ProgramError> {
-    use pinocchio_token_2022::state::AccountType;
-    let ext_start = pinocchio_token_2022::state::Account::BASE_LEN + 1;
+    let ext_start = T22TokenAccount::BASE_LEN + 1;
     if acc_data_bytes.len() <= ext_start {
         return Ok(Vec::new());
     }
-    let account_type_byte = acc_data_bytes[pinocchio_token_2022::state::Account::BASE_LEN];
-    if account_type_byte != AccountType::Mint as u8
-        && account_type_byte != AccountType::Account as u8
+    let account_type_byte = acc_data_bytes[T22TokenAccount::BASE_LEN];
+    if account_type_byte != T22_ACCOUNT_TYPE_MINT
+        && account_type_byte != T22_ACCOUNT_TYPE_TOKEN_ACCOUNT
     {
         return Err(ProgramError::InvalidAccountData);
     }
@@ -206,23 +212,23 @@ mod tests {
 
     #[test]
     fn token_account_t22_base_len() {
-        let data = vec![0u8; pinocchio_token_2022::state::Account::BASE_LEN];
+        let data = vec![0u8; T22TokenAccount::BASE_LEN];
         let (_buf, view) = make_account(t22_id(), data);
         assert!(TokenAccount::from_account_view(&view).is_ok());
     }
 
     #[test]
     fn token_account_t22_with_extensions() {
-        let mut data = vec![0u8; pinocchio_token_2022::state::Account::BASE_LEN + 2];
-        data[pinocchio_token_2022::state::Account::BASE_LEN] = 2; // account type = TokenAccount
+        let mut data = vec![0u8; T22TokenAccount::BASE_LEN + 2];
+        data[T22TokenAccount::BASE_LEN] = T22_ACCOUNT_TYPE_TOKEN_ACCOUNT;
         let (_buf, view) = make_account(t22_id(), data);
         assert!(TokenAccount::from_account_view(&view).is_ok());
     }
 
     #[test]
     fn token_account_t22_wrong_type() {
-        let mut data = vec![0u8; pinocchio_token_2022::state::Account::BASE_LEN + 2];
-        data[pinocchio_token_2022::state::Account::BASE_LEN] = 1; // account type = Mint (wrong)
+        let mut data = vec![0u8; T22TokenAccount::BASE_LEN + 2];
+        data[T22TokenAccount::BASE_LEN] = T22_ACCOUNT_TYPE_MINT; // wrong for token account
         let (_buf, view) = make_account(t22_id(), data);
         assert_eq!(
             TokenAccount::from_account_view(&view).err().unwrap(),
@@ -233,7 +239,7 @@ mod tests {
     #[test]
     fn token_account_t22_multisig_length() {
         let mut data = vec![0u8; MULTISIG_ACCOUNT_LENGTH];
-        data[pinocchio_token_2022::state::Account::BASE_LEN] = 2;
+        data[T22TokenAccount::BASE_LEN] = T22_ACCOUNT_TYPE_TOKEN_ACCOUNT;
         let (_buf, view) = make_account(t22_id(), data);
         assert_eq!(
             TokenAccount::from_account_view(&view).err().unwrap(),
@@ -260,7 +266,7 @@ mod tests {
 
     #[test]
     fn token_account_wrong_owner() {
-        let data = vec![0u8; pinocchio_token_2022::state::Account::BASE_LEN];
+        let data = vec![0u8; T22TokenAccount::BASE_LEN];
         let (_buf, view) = make_account([0u8; 32], data);
         assert_eq!(
             TokenAccount::from_account_view(&view).err().unwrap(),
@@ -279,16 +285,16 @@ mod tests {
 
     #[test]
     fn mint_t22_with_extensions() {
-        let mut data = vec![0u8; pinocchio_token_2022::state::Account::BASE_LEN + 2];
-        data[pinocchio_token_2022::state::Account::BASE_LEN] = 1; // account type = Mint
+        let mut data = vec![0u8; T22TokenAccount::BASE_LEN + 2];
+        data[T22TokenAccount::BASE_LEN] = T22_ACCOUNT_TYPE_MINT;
         let (_buf, view) = make_account(t22_id(), data);
         assert!(Mint::from_account_view(&view).is_ok());
     }
 
     #[test]
     fn mint_t22_wrong_type() {
-        let mut data = vec![0u8; pinocchio_token_2022::state::Account::BASE_LEN + 2];
-        data[pinocchio_token_2022::state::Account::BASE_LEN] = 2; // account type = TokenAccount (wrong)
+        let mut data = vec![0u8; T22TokenAccount::BASE_LEN + 2];
+        data[T22TokenAccount::BASE_LEN] = T22_ACCOUNT_TYPE_TOKEN_ACCOUNT; // wrong for mint
         let (_buf, view) = make_account(t22_id(), data);
         assert_eq!(
             Mint::from_account_view(&view).err().unwrap(),
@@ -407,13 +413,13 @@ mod tests {
 
     #[test]
     fn test_get_all_extensions_no_extensions() {
-        let data = vec![0u8; pinocchio_token_2022::state::Account::BASE_LEN + 1];
+        let data = vec![0u8; T22TokenAccount::BASE_LEN + 1];
         assert_eq!(get_all_extensions(&data).unwrap(), vec![]);
     }
 
     #[test]
     fn test_get_all_extensions_wrong_account_type() {
-        let base = pinocchio_token_2022::state::Account::BASE_LEN;
+        let base = T22TokenAccount::BASE_LEN;
         let mut data = vec![0u8; base + 2];
         data[base] = 0; // Uninitialized AccountType
         assert_eq!(
