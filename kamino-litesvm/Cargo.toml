@@ -1,10 +1,11 @@
 [package]
 name = "exo-kamino-litesvm"
-version = { workspace = true }
-edition = { workspace = true }
 description = "Utilities and state structures for testing Kamino lending and farming protocols in LiteSVM"
+version.workspace = true
+edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 bytemuck = { workspace = true }

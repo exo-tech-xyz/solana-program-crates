@@ -1,10 +1,11 @@
 [package]
 name = "exo-pinocchio-accounts-struct"
+description = "Macro for declaratively defining and validating account context structs in Pinocchio programs"
 version.workspace = true
 edition.workspace = true
-description = "Macro for declaratively defining and validating account context structs in Pinocchio programs"
 homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dev-dependencies]
 pinocchio-log = { workspace = true }
