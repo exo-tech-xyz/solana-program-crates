@@ -66,7 +66,10 @@ jobs:
           toolchain: stable
 
       - name: Install tools
-        run: cargo install cargo-workspaces cargo-audit cargo-deny --locked
+        run: |
+          cargo install cargo-workspaces --version 0.4.2 
+          cargo install cargo-audit --version 0.22.1
+          cargo install cargo-deny --version 0.19.6
 
       - name: Audit
         run: |
