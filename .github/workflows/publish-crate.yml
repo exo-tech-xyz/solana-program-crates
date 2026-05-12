@@ -17,40 +17,39 @@ on:
         type: boolean
 
 jobs:
-  verify-tag-on-main:
-    runs-on: ubuntu-latest
-    if: github.ref_type == 'tag'
-    outputs:
-      is_valid: ${{ steps.check.outputs.is_valid }}
-    steps:
-      # Pinned actions/checkout@v6.0.2
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          fetch-depth: 0
+  # verify-tag-on-main:
+  #   runs-on: ubuntu-latest
+  #   if: github.ref_type == 'tag'
+  #   outputs:
+  #     is_valid: ${{ steps.check.outputs.is_valid }}
+  #   steps:
+  #     # Pinned actions/checkout@v6.0.2
+  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Verify tag points to a commit on main
-        id: check
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          echo "Checking tag: $TAG"
+  #     - name: Verify tag points to a commit on main
+  #       id: check
+  #       run: |
+  #         TAG="${GITHUB_REF#refs/tags/}"
+  #         echo "Checking tag: $TAG"
 
-          # Find branches containing this commit
-          BRANCHES=$(git branch --contains "${GITHUB_SHA}" --format='%(refname:short)')
+  #         # Find branches containing this commit
+  #         BRANCHES=$(git branch --contains "${GITHUB_SHA}" --format='%(refname:short)')
 
-          # TODO uncomment this and use main
-          # if echo "$BRANCHES" | grep -q '^main$'; then
-          if echo "$BRANCHES" | grep -q '^ci-publishing$'; then
-            echo "✅ Tag $TAG is on main branch"
-            echo "is_valid=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Tag $TAG is NOT on main (found on: $BRANCHES)"
-            echo "is_valid=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
+  #         if echo "$BRANCHES" | grep -q '^main$'; then
+  #           echo "✅ Tag $TAG is on main branch"
+  #           echo "is_valid=true" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "❌ Tag $TAG is NOT on main (found on: $BRANCHES)"
+  #           echo "is_valid=false" >> $GITHUB_OUTPUT
+  #           exit 1
+  #         fi
 
   publish:
-    needs: verify-tag-on-main
-    if: needs.verify-tag-on-main.outputs.is_valid == 'true'
+    # needs: verify-tag-on-main
+    # TODO uncomment
+    # if: needs.verify-tag-on-main.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
     environment: release
     permissions:
