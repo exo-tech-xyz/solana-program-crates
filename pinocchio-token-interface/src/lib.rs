@@ -4,7 +4,7 @@ use solana_account_view::{AccountView, Ref};
 
 pub use pinocchio_token_2022::instructions;
 
-use pinocchio_token_2022::state::Account as T22TokenAccount;
+use pinocchio_token_2022::state::TokenAccount as T22TokenAccount;
 
 const EXTENSION_TYPE_LEN: usize = 2;
 const EXTENSION_LENGTH_LEN: usize = 2;
@@ -78,7 +78,7 @@ impl<'info> TokenAccount<'info> {
                 .map(TokenAccount)
                 .map_err(|_| ProgramError::InvalidAccountData)
         } else if account_view.owned_by(&pinocchio_token::ID) {
-            if account_view.data_len() != pinocchio_token::state::Account::LEN {
+            if account_view.data_len() != pinocchio_token::state::TokenAccount::LEN {
                 return Err(ProgramError::InvalidAccountData);
             }
             // SAFETY: Legacy Token and Token-2022 token account structs share the same base layout.
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn token_account_legacy_success() {
-        let data = vec![0u8; pinocchio_token::state::Account::LEN];
+        let data = vec![0u8; pinocchio_token::state::TokenAccount::LEN];
         let (_buf, view) = make_account(token_id(), data);
         assert!(TokenAccount::from_account_view(&view).is_ok());
     }
