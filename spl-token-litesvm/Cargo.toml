@@ -1,7 +1,10 @@
 [package]
-name = "spl-token-litesvm"
+name = "exo-spl-token-litesvm"
 version = { workspace = true }
 edition = { workspace = true }
+description = "Utilities for creating and managing SPL token accounts in LiteSVM test environments"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 litesvm = { workspace = true }

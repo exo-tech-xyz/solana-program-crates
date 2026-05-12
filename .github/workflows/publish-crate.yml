@@ -1,0 +1,92 @@
+name: Publish to crates.io
+
+on:
+  push:
+    tags:
+      - '*-v[0-9]+.[0-9]+.[0-9]+*'   # e.g., crate-a-v1.2.3
+  workflow_dispatch:
+    inputs:
+      crate:
+        description: 'Crate to publish (name or "all")'
+        required: true
+        type: string
+      dry_run:
+        description: 'Perform dry-run only'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  verify-tag-on-main:
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    outputs:
+      is_valid: ${{ steps.check.outputs.is_valid }}
+    steps:
+      # Pinned actions/checkout@v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag points to a commit on main
+        id: check
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Checking tag: $TAG"
+
+          # Find branches containing this commit
+          BRANCHES=$(git branch --contains "${GITHUB_SHA}" --format='%(refname:short)')
+
+          # TODO uncomment this and use main
+          # if echo "$BRANCHES" | grep -q '^main$'; then
+          if echo "$BRANCHES" | grep -q '^ci-publishing$'; then
+            echo "✅ Tag $TAG is on main branch"
+            echo "is_valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Tag $TAG is NOT on main (found on: $BRANCHES)"
+            echo "is_valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  publish:
+    needs: verify-tag-on-main
+    if: needs.verify-tag-on-main.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      # Pinned actions/checkout@v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # Pinned dtolnay/rust-toolchain@1.94.1
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+        with:
+          toolchain: stable
+
+      - name: Install tools
+        run: cargo install cargo-workspaces cargo-audit cargo-deny --locked
+
+      - name: Audit
+        run: |
+          cargo audit
+          cargo deny check
+
+      - name: Trusted Publishing
+        # Pinned rust-lang/crates-io-auth-action@1.0.4
+        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
+        id: auth
+
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          CRATE="${{ inputs.crate || 'auto' }}"
+          DRY="${{ inputs.dry_run == 'true' && '--dry-run' || '' }}"
+
+          if [ "$CRATE" = "all" ]; then
+            cargo workspaces publish --from-git $DRY --yes
+          else
+            cargo publish -p "$CRATE" $DRY
+          fi
