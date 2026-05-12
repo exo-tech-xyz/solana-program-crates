@@ -89,7 +89,7 @@ jobs:
           DRY="${{ inputs.dry_run == 'true' && '--dry-run' || '' }}"
 
           if [ "$CRATE" = "all" ]; then
-            cargo workspaces publish --from-git $DRY --yes
+            cargo workspaces publish --from-git $DRY --publish-interval 20 --yes
           else
             cargo publish -p "$CRATE" $DRY
           fi
