@@ -7,7 +7,7 @@ use solana_sdk::{
     account::Account, clock::Clock, pubkey::Pubkey, signature::Keypair, signer::Signer,
     transaction::Transaction,
 };
-use spl_token_litesvm::{setup_token_account, setup_token_mint};
+use exo_spl_token_litesvm::{setup_token_account, setup_token_mint};
 
 use crate::{
     instructions::{

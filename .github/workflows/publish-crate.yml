@@ -1,0 +1,101 @@
+name: Publish to crates.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Perform dry-run only'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  publish:
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      # Pinned actions/checkout@v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      # Pinned dtolnay/rust-toolchain@1.94.1
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+        with:
+          toolchain: stable
+
+      # Pinned actions/cache@v5.0.5
+      - name: Cache cargo tools
+        id: cache-tools
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: ~/.cargo/bin
+          key: cargo-tools-audit-0.22.1-deny-0.19.6-${{ runner.os }}
+
+      - name: Install tools
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          cargo install cargo-audit --version 0.22.1
+          cargo install cargo-deny --version 0.19.6
+
+      - name: Audit
+        run: cargo audit
+
+      - name: Deny
+        run: cargo deny check licenses
+
+      - name: Trusted Publishing
+        # Pinned rust-lang/crates-io-auth-action@1.0.4
+        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
+        id: auth
+
+      - name: Detect and publish changed crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          DRY_RUN="${{ inputs.dry_run == 'true' && '--dry-run' || '' }}"
+
+          # Dependency order: spl-token-litesvm before kamino-litesvm (which depends on it).
+          # Placing pinocchio crates between them adds natural index-propagation delay.
+          CRATES=(
+            "exo-spl-token-litesvm:spl-token-litesvm"
+            "exo-pinocchio-accounts-struct:pinocchio-accounts-struct"
+            "exo-pinocchio-token-interface:pinocchio-token-interface"
+            "exo-kamino-litesvm:kamino-litesvm"
+          )
+
+          for ENTRY in "${CRATES[@]}"; do
+            CRATE_NAME="${ENTRY%%:*}"
+            CRATE_DIR="${ENTRY##*:}"
+
+            LOCAL_VERSION=$(grep '^version = ' "${CRATE_DIR}/Cargo.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+            echo "Checking ${CRATE_NAME} (local: ${LOCAL_VERSION})"
+
+            API_RESPONSE=$(curl -sf \
+              -H "User-Agent: exo-tech-xyz/solana-program-crates publish-workflow" \
+              "https://crates.io/api/v1/crates/${CRATE_NAME}" || echo "NOT_FOUND")
+
+            if [ "$API_RESPONSE" = "NOT_FOUND" ]; then
+              PUBLISHED_VERSION=""
+            else
+              PUBLISHED_VERSION=$(echo "$API_RESPONSE" | jq -r '.crate.newest_version // ""')
+            fi
+
+            echo "  Published: '${PUBLISHED_VERSION}'"
+
+            if [ "$LOCAL_VERSION" != "$PUBLISHED_VERSION" ]; then
+              echo "  Version differs — publishing ${CRATE_NAME}@${LOCAL_VERSION}"
+              cargo publish -p "${CRATE_NAME}" ${DRY_RUN}
+              if [ -z "$DRY_RUN" ]; then
+                echo "  Waiting 20s for crates.io index propagation..."
+                sleep 20
+              fi
+            else
+              echo "  Already up to date — skipping"
+            fi
+          done
