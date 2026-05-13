@@ -1023,7 +1023,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "exo-kamino-litesvm"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "bytemuck",
  "exo-spl-token-litesvm",
@@ -1037,7 +1037,7 @@ dependencies = [
 
 [[package]]
 name = "exo-pinocchio-accounts-struct"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "pinocchio",
  "pinocchio-log",
@@ -1045,7 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "exo-pinocchio-token-interface"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "pinocchio",
  "pinocchio-token",
@@ -1055,7 +1055,7 @@ dependencies = [
 
 [[package]]
 name = "exo-spl-token-litesvm"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "litesvm",
  "solana-sdk",
