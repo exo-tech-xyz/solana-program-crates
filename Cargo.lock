@@ -1050,7 +1050,7 @@ dependencies = [
  "pinocchio",
  "pinocchio-token",
  "pinocchio-token-2022",
- "solana-account-view 2.0.0",
+ "solana-account-view",
 ]
 
 [[package]]
@@ -1831,16 +1831,6 @@ dependencies = [
  "solana-address 2.6.0",
  "solana-instruction-view",
  "solana-program-error",
-]
-
-[[package]]
-name = "pinocchio-token-interface"
-version = "0.1.0"
-dependencies = [
- "pinocchio",
- "pinocchio-token",
- "pinocchio-token-2022",
- "solana-account-view",
 ]
 
 [[package]]
