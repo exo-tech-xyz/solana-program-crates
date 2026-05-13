@@ -7,7 +7,6 @@ members = [
 ]
 resolver = "2"
 
-package.version = "0.1.0-rc.1"
 package.edition = "2021"
 package.homepage = "https://exotechnologies.xyz"
 package.repository = "https://github.com/exo-tech-xyz/solana-program-crates"

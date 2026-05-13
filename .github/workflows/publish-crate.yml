@@ -1,15 +1,8 @@
 name: Publish to crates.io
 
 on:
-  push:
-    tags:
-      - '*-v[0-9]+.[0-9]+.[0-9]+*'   # e.g., crate-a-v1.2.3
   workflow_dispatch:
     inputs:
-      crate:
-        description: 'Crate to publish (name or "all")'
-        required: true
-        type: string
       dry_run:
         description: 'Perform dry-run only'
         required: false
@@ -17,39 +10,8 @@ on:
         type: boolean
 
 jobs:
-  # verify-tag-on-main:
-  #   runs-on: ubuntu-latest
-  #   if: github.ref_type == 'tag'
-  #   outputs:
-  #     is_valid: ${{ steps.check.outputs.is_valid }}
-  #   steps:
-  #     # Pinned actions/checkout@v6.0.2
-  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Verify tag points to a commit on main
-  #       id: check
-  #       run: |
-  #         TAG="${GITHUB_REF#refs/tags/}"
-  #         echo "Checking tag: $TAG"
-
-  #         # Find branches containing this commit
-  #         BRANCHES=$(git branch --contains "${GITHUB_SHA}" --format='%(refname:short)')
-
-  #         if echo "$BRANCHES" | grep -q '^main$'; then
-  #           echo "✅ Tag $TAG is on main branch"
-  #           echo "is_valid=true" >> $GITHUB_OUTPUT
-  #         else
-  #           echo "❌ Tag $TAG is NOT on main (found on: $BRANCHES)"
-  #           echo "is_valid=false" >> $GITHUB_OUTPUT
-  #           exit 1
-  #         fi
-
   publish:
-    # needs: verify-tag-on-main
-    # TODO uncomment
-    # if: needs.verify-tag-on-main.outputs.is_valid == 'true'
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -70,18 +32,17 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ~/.cargo/bin
-          key: cargo-tools-ws-0.4.2-audit-0.22.1-deny-0.19.6-${{ runner.os }}
+          key: cargo-tools-audit-0.22.1-deny-0.19.6-${{ runner.os }}
 
       - name: Install tools
         if: steps.cache-tools.outputs.cache-hit != 'true'
         run: |
-          cargo install cargo-workspaces --version 0.4.2
           cargo install cargo-audit --version 0.22.1
           cargo install cargo-deny --version 0.19.6
 
       - name: Audit
         run: cargo audit
-      
+
       - name: Deny
         run: cargo deny check licenses
 
@@ -90,15 +51,51 @@ jobs:
         uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
         id: auth
 
-      - name: Publish
+      - name: Detect and publish changed crates
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
-          CRATE="${{ inputs.crate || 'auto' }}"
-          DRY="${{ inputs.dry_run == 'true' && '--dry-run' || '' }}"
+          set -euo pipefail
 
-          if [ "$CRATE" = "all" ]; then
-            cargo workspaces publish --from-git $DRY --publish-interval 20 --yes
-          else
-            cargo publish -p "$CRATE" $DRY
-          fi
+          DRY_RUN="${{ inputs.dry_run == 'true' && '--dry-run' || '' }}"
+
+          # Dependency order: spl-token-litesvm before kamino-litesvm (which depends on it).
+          # Placing pinocchio crates between them adds natural index-propagation delay.
+          CRATES=(
+            "exo-spl-token-litesvm:spl-token-litesvm"
+            "exo-pinocchio-accounts-struct:pinocchio-accounts-struct"
+            "exo-pinocchio-token-interface:pinocchio-token-interface"
+            "exo-kamino-litesvm:kamino-litesvm"
+          )
+
+          for ENTRY in "${CRATES[@]}"; do
+            CRATE_NAME="${ENTRY%%:*}"
+            CRATE_DIR="${ENTRY##*:}"
+
+            LOCAL_VERSION=$(grep '^version = ' "${CRATE_DIR}/Cargo.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+            echo "Checking ${CRATE_NAME} (local: ${LOCAL_VERSION})"
+
+            API_RESPONSE=$(curl -sf \
+              -H "User-Agent: exo-tech-xyz/solana-program-crates publish-workflow" \
+              "https://crates.io/api/v1/crates/${CRATE_NAME}" || echo "NOT_FOUND")
+
+            if [ "$API_RESPONSE" = "NOT_FOUND" ]; then
+              PUBLISHED_VERSION=""
+            else
+              PUBLISHED_VERSION=$(echo "$API_RESPONSE" | jq -r '.crate.newest_version // ""')
+            fi
+
+            echo "  Published: '${PUBLISHED_VERSION}'"
+
+            if [ "$LOCAL_VERSION" != "$PUBLISHED_VERSION" ]; then
+              echo "  Version differs — publishing ${CRATE_NAME}@${LOCAL_VERSION}"
+              cargo publish -p "${CRATE_NAME}" ${DRY_RUN}
+              if [ -z "$DRY_RUN" ]; then
+                echo "  Waiting 20s for crates.io index propagation..."
+                sleep 20
+              fi
+            else
+              echo "  Already up to date — skipping"
+            fi
+          done
