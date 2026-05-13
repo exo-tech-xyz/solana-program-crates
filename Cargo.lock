@@ -1022,6 +1022,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "exo-kamino-litesvm"
+version = "0.1.0-rc.1"
+dependencies = [
+ "bytemuck",
+ "exo-spl-token-litesvm",
+ "fixed",
+ "litesvm",
+ "sha2-const-stable",
+ "solana-sdk",
+ "spl-token",
+ "uint",
+]
+
+[[package]]
+name = "exo-pinocchio-accounts-struct"
+version = "0.1.0-rc.1"
+dependencies = [
+ "pinocchio",
+ "pinocchio-log",
+]
+
+[[package]]
+name = "exo-pinocchio-token-interface"
+version = "0.1.0-rc.1"
+dependencies = [
+ "pinocchio",
+ "pinocchio-token",
+ "pinocchio-token-2022",
+ "solana-account-view 2.0.0",
+]
+
+[[package]]
+name = "exo-spl-token-litesvm"
+version = "0.1.0-rc.1"
+dependencies = [
+ "litesvm",
+ "solana-sdk",
+ "spl-token-2022",
+]
+
+[[package]]
 name = "feature-probe"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1340,20 +1381,6 @@ dependencies = [
  "once_cell",
  "sha2 0.10.9",
  "signature",
-]
-
-[[package]]
-name = "kamino-litesvm"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "fixed",
- "litesvm",
- "sha2-const-stable",
- "solana-sdk",
- "spl-token",
- "spl-token-litesvm",
- "uint",
 ]
 
 [[package]]
@@ -1763,14 +1790,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pinocchio-accounts-struct"
-version = "0.1.0"
-dependencies = [
- "pinocchio",
- "pinocchio-log",
-]
-
-[[package]]
 name = "pinocchio-log"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1812,16 +1831,6 @@ dependencies = [
  "solana-address 2.6.0",
  "solana-instruction-view 2.1.0",
  "solana-program-error",
-]
-
-[[package]]
-name = "pinocchio-token-interface"
-version = "0.1.0"
-dependencies = [
- "pinocchio",
- "pinocchio-token",
- "pinocchio-token-2022",
- "solana-account-view 2.0.0",
 ]
 
 [[package]]
@@ -4231,15 +4240,6 @@ dependencies = [
  "solana-pubkey 3.0.0",
  "solana-sdk-ids",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "spl-token-litesvm"
-version = "0.1.0"
-dependencies = [
- "litesvm",
- "solana-sdk",
- "spl-token-2022",
 ]
 
 [[package]]

@@ -1,7 +1,11 @@
 [package]
-name = "kamino-litesvm"
-version = { workspace = true }
-edition = { workspace = true }
+name = "exo-kamino-litesvm"
+description = "Utilities and state structures for testing Kamino lending and farming protocols in LiteSVM"
+version = "0.1.0-rc.1"
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 bytemuck = { workspace = true }
@@ -10,5 +14,5 @@ litesvm = { workspace = true }
 sha2-const-stable = { workspace = true }
 solana-sdk = { workspace = true }
 spl-token = { workspace = true, features = ["no-entrypoint"] }
-spl-token-litesvm = { workspace = true }
+exo-spl-token-litesvm = { workspace = true }
 uint = { workspace = true }

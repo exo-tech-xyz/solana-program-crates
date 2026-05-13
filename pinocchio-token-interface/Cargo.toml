@@ -1,7 +1,11 @@
 [package]
-name = "pinocchio-token-interface"
-version.workspace = true
+name = "exo-pinocchio-token-interface"
+description = "Wrappers for Token and Token-2022 account interaction in Pinocchio Solana programs"
+version = "0.1.0-rc.1"
 edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 pinocchio = { workspace = true }
