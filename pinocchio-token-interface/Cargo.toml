@@ -12,3 +12,4 @@ pinocchio = { workspace = true }
 pinocchio-token = { workspace = true }
 pinocchio-token-2022 = { workspace = true }
 solana-account-view = { workspace = true }
+spl-token-2022-interface = { workspace = true }

@@ -1051,6 +1051,7 @@ dependencies = [
  "pinocchio-token",
  "pinocchio-token-2022",
  "solana-account-view",
+ "spl-token-2022-interface",
 ]
 
 [[package]]

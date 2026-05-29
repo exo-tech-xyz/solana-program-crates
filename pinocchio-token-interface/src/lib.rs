@@ -1,50 +1,20 @@
 use core::ops::Deref;
 use pinocchio::error::ProgramError;
 use solana_account_view::{AccountView, Ref};
+use spl_token_2022_interface::{
+    extension::{BaseStateWithExtensions, StateWithExtensions},
+    state::{Account, Mint as InterfaceMint},
+};
 
 pub use pinocchio_token_2022::instructions;
+pub use spl_token_2022_interface::extension::{self, ExtensionType};
 
 use pinocchio_token_2022::state::TokenAccount as T22TokenAccount;
-
-const EXTENSION_TYPE_LEN: usize = 2;
-const EXTENSION_LENGTH_LEN: usize = 2;
 
 /// SPL Token-2022 account-type byte after the 165-byte base state (`AccountType::Mint`).
 const T22_ACCOUNT_TYPE_MINT: u8 = 1;
 /// SPL Token-2022 account-type byte for a token holding account (`AccountType::Account`).
 const T22_ACCOUNT_TYPE_TOKEN_ACCOUNT: u8 = 2;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ExtensionType {
-    TransferFeeConfig,
-    MintCloseAuthority,
-    ConfidentialTransferMint,
-    PermanentDelegate,
-    TransferHook,
-    ConfidentialTransferFeeConfig,
-    MetadataPointer,
-    TokenMetadata,
-    GroupPointer,
-    TokenGroup,
-}
-
-impl ExtensionType {
-    fn from_bytes(b: [u8; 2]) -> Option<Self> {
-        match u16::from_le_bytes(b) {
-            1 => Some(Self::TransferFeeConfig),
-            3 => Some(Self::MintCloseAuthority),
-            4 => Some(Self::ConfidentialTransferMint),
-            12 => Some(Self::PermanentDelegate),
-            14 => Some(Self::TransferHook),
-            16 => Some(Self::ConfidentialTransferFeeConfig),
-            18 => Some(Self::MetadataPointer),
-            19 => Some(Self::TokenMetadata),
-            20 => Some(Self::GroupPointer),
-            21 => Some(Self::TokenGroup),
-            _ => None,
-        }
-    }
-}
 
 pub struct TokenAccount<'info>(Ref<'info, T22TokenAccount>);
 
@@ -147,34 +117,19 @@ impl Deref for Mint<'_> {
 /// Iterate over TLV extension data and return all extension types present.
 /// Works for both Token-2022 Mint and TokenAccount accounts.
 pub fn get_all_extensions(acc_data_bytes: &[u8]) -> Result<Vec<ExtensionType>, ProgramError> {
-    let ext_start = T22TokenAccount::BASE_LEN + 1;
-    if acc_data_bytes.len() <= ext_start {
+    if acc_data_bytes.len() <= T22TokenAccount::BASE_LEN {
         return Ok(Vec::new());
     }
-    let account_type_byte = acc_data_bytes[T22TokenAccount::BASE_LEN];
-    if account_type_byte != T22_ACCOUNT_TYPE_MINT
-        && account_type_byte != T22_ACCOUNT_TYPE_TOKEN_ACCOUNT
-    {
-        return Err(ProgramError::InvalidAccountData);
+
+    match acc_data_bytes[T22TokenAccount::BASE_LEN] {
+        T22_ACCOUNT_TYPE_MINT => {
+            StateWithExtensions::<InterfaceMint>::unpack(acc_data_bytes)?.get_extension_types()
+        }
+        T22_ACCOUNT_TYPE_TOKEN_ACCOUNT => {
+            StateWithExtensions::<Account>::unpack(acc_data_bytes)?.get_extension_types()
+        }
+        _ => Err(ProgramError::InvalidAccountData),
     }
-    let ext_bytes = &acc_data_bytes[ext_start..];
-    let mut extension_types = Vec::new();
-    let mut start = 0;
-    while start + EXTENSION_TYPE_LEN + EXTENSION_LENGTH_LEN <= ext_bytes.len() {
-        let type_bytes: [u8; 2] = ext_bytes[start..start + EXTENSION_TYPE_LEN]
-            .try_into()
-            .map_err(|_| ProgramError::InvalidAccountData)?;
-        let ext_type =
-            ExtensionType::from_bytes(type_bytes).ok_or(ProgramError::InvalidAccountData)?;
-        let len_bytes: [u8; 2] = ext_bytes
-            [start + EXTENSION_TYPE_LEN..start + EXTENSION_TYPE_LEN + EXTENSION_LENGTH_LEN]
-            .try_into()
-            .map_err(|_| ProgramError::InvalidAccountData)?;
-        let ext_len = u16::from_le_bytes(len_bytes) as usize;
-        extension_types.push(ext_type);
-        start += EXTENSION_TYPE_LEN + EXTENSION_LENGTH_LEN + ext_len;
-    }
-    Ok(extension_types)
 }
 
 #[cfg(test)]
@@ -413,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_get_all_extensions_no_extensions() {
-        let data = vec![0u8; T22TokenAccount::BASE_LEN + 1];
+        let data = vec![0u8; T22TokenAccount::BASE_LEN];
         assert_eq!(get_all_extensions(&data).unwrap(), vec![]);
     }
 
