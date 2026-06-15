@@ -106,6 +106,7 @@ impl<'info> Mint<'info> {
     pub fn from_account_view(account_view: &'info AccountView) -> Result<Self, ProgramError> {
         if account_view.owned_by(&pinocchio_token_2022::ID) {
             let data_len = account_view.data_len();
+            let mint_base_len = pinocchio_token_2022::state::Mint::BASE_LEN;
             // Use `T22TokenAccount::BASE_LEN` (165) as threshold — that is where the account-type
             // byte lives for all extensible T22 accounts, including Mints.
             if data_len > T22TokenAccount::BASE_LEN {
@@ -118,6 +119,9 @@ impl<'info> Mint<'info> {
                 if data_len == MULTISIG_ACCOUNT_LENGTH {
                     return Err(ProgramError::InvalidAccountData);
                 }
+            } else if data_len != mint_base_len {
+                // Reject 83..=165: token-account size and other invalid mint lengths.
+                return Err(ProgramError::InvalidAccountData);
             }
             pinocchio_token_2022::state::Mint::from_account_view(account_view)
                 .map(Mint)
@@ -295,6 +299,32 @@ mod tests {
     fn mint_t22_wrong_type() {
         let mut data = vec![0u8; T22TokenAccount::BASE_LEN + 2];
         data[T22TokenAccount::BASE_LEN] = T22_ACCOUNT_TYPE_TOKEN_ACCOUNT; // wrong for mint
+        let (_buf, view) = make_account(t22_id(), data);
+        assert_eq!(
+            Mint::from_account_view(&view).err().unwrap(),
+            ProgramError::InvalidAccountData,
+        );
+    }
+
+    #[test]
+    fn mint_t22_rejects_token_account_as_mint() {
+        let data = vec![0u8; T22TokenAccount::BASE_LEN];
+        let (_buf, view) = make_account(t22_id(), data);
+
+        // Valid token holding account at base size.
+        assert!(TokenAccount::from_account_view(&view).is_ok());
+
+        // Must not be accepted as a mint.
+        // previous implementation would accept a Token-2022 account as a mint. This is no longer allowed.
+        assert_eq!(
+            Mint::from_account_view(&view).err().unwrap(),
+            ProgramError::InvalidAccountData,
+        );
+    }
+
+    #[test]
+    fn mint_t22_invalid_intermediate_length_rejected() {
+        let data = vec![0u8; 100];
         let (_buf, view) = make_account(t22_id(), data);
         assert_eq!(
             Mint::from_account_view(&view).err().unwrap(),
