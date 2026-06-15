@@ -314,7 +314,8 @@ mod tests {
         // Valid token holding account at base size.
         assert!(TokenAccount::from_account_view(&view).is_ok());
 
-        // Must not be accepted as a mint (bug: previously accepted because 165 >= 82).
+        // Must not be accepted as a mint.
+        // previous implementation would accept a Token-2022 account as a mint. This is no longer allowed.
         assert_eq!(
             Mint::from_account_view(&view).err().unwrap(),
             ProgramError::InvalidAccountData,
