@@ -11,7 +11,7 @@ on:
 
 jobs:
   publish:
-    if: github.ref_name == 'main'
+    if: github.ref_name == 'main' || github.ref_name == 'v0.1'
     runs-on: ubuntu-latest
     environment: release
     permissions:
