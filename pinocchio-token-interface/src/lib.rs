@@ -353,4 +353,30 @@ mod tests {
             ProgramError::InvalidAccountData,
         );
     }
+
+    #[test]
+    fn mint_t22_rejects_token_account_as_mint() {
+        let data = vec![0u8; T22TokenAccount::BASE_LEN];
+        let (_buf, view) = make_account(t22_id(), data);
+
+        // Valid token holding account at base size.
+        assert!(TokenAccount::from_account_view(&view).is_ok());
+
+        // Must not be accepted as a mint.
+        // previous implementation would accept a Token-2022 account as a mint. This is no longer allowed.
+        assert_eq!(
+            Mint::from_account_view(&view).err().unwrap(),
+            ProgramError::InvalidAccountData,
+        );
+    }
+
+    #[test]
+    fn mint_t22_invalid_intermediate_length_rejected() {
+        let data = vec![0u8; 100];
+        let (_buf, view) = make_account(t22_id(), data);
+        assert_eq!(
+            Mint::from_account_view(&view).err().unwrap(),
+            ProgramError::InvalidAccountData,
+        );
+    }
 }

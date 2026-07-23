@@ -162,7 +162,7 @@ mod tests {
             (*raw).is_signer = if is_signer { 1 } else { 0 };
             (*raw).is_writable = if is_writable { 1 } else { 0 };
             (*raw).executable = 0;
-            (*raw).resize_delta = 0;
+            (*raw).padding = [0; 4];
             (*raw).address = Address::new_from_array(address);
             (*raw).owner = Address::new_from_array(owner);
             (*raw).lamports = 0;
