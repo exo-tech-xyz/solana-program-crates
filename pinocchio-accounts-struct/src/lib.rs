@@ -84,7 +84,7 @@ macro_rules! account_field_ty {
 /// - `@pubkey(KEY1, KEY2...)` — account pubkey must match one of the keys provided
 /// - `@owner(KEY1, KEY2...)` — account owner must match one of the keys provided
 ///
-/// Use `@remaining_accounts as remaining_accounts;` to capture extra accounts as `&'info mut [AccountView].
+/// Use `@remaining_accounts as remaining_accounts;` to capture extra accounts as `&'info mut [AccountView]`.
 ///
 /// The generated `from_accounts` consumes accounts in order and applies all checks.
 #[macro_export]
@@ -491,5 +491,6 @@ mod tests {
         let mut accounts = [v0, v1, v2];
         let ctx = Ctx::from_accounts(&mut accounts).unwrap();
         assert_eq!(ctx.remaining.len(), 2);
+        let _: &mut [AccountView] = ctx.remaining;
     }
 }
