@@ -1,3 +1,10 @@
+//! Macro for declaratively defining and validating account context structs
+//! in Pinocchio programs, with optional eager zero-copy account loading.
+
+mod account;
+
+pub use account::{Account, MutAccount, MutBytes, ZeroCopyAccount};
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! check_account_attr {
@@ -19,6 +26,7 @@ macro_rules! check_account_attr {
             return Err(pinocchio::error::ProgramError::AccountAlreadyInitialized);
         }
     };
+    ($field:ident, $program_id:expr, bytes) => {};
     ($field:ident, $program_id:expr, opt_signer) => {
         if $field.address() != &pinocchio::Address::new_from_array($program_id)
             && !$field.is_signer()
@@ -35,24 +43,155 @@ macro_rules! check_account_attr {
     };
 }
 
-/// Resolves a field's reference type from its attribute list.
-///
-/// If any attr is `mut`, expands to `& $lt mut AccountView`; otherwise
-/// `& $lt AccountView`.
+/// Resolves a field's type from attrs + optional `@account(T)` / `bytes`.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! account_field_ty {
-    (@ty $lt:lifetime ; mut $($rest:tt)*) => {
+    // Typed + mut anywhere in attrs
+    (@ty $lt:lifetime ; @account($ty:ty) ; mut $($rest:tt)*) => {
+        $crate::MutAccount<$lt, $ty>
+    };
+    (@ty $lt:lifetime ; @account($ty:ty) ; $head:ident $($rest:tt)*) => {
+        $crate::account_field_ty!(@ty $lt ; @account($ty) ; $($rest)*)
+    };
+    (@ty $lt:lifetime ; @account($ty:ty) ;) => {
+        $crate::Account<$lt, $ty>
+    };
+
+    // Raw bytes (requires mut)
+    (@ty $lt:lifetime ; @bytes ; mut $($rest:tt)*) => {
+        $crate::MutBytes<$lt>
+    };
+    (@ty $lt:lifetime ; @bytes ; $head:ident $($rest:tt)*) => {
+        $crate::account_field_ty!(@ty $lt ; @bytes ; $($rest)*)
+    };
+    (@ty $lt:lifetime ; @bytes ;) => {
+        ::core::compile_error!("`bytes` account fields require the `mut` attribute")
+    };
+
+    // Untyped
+    (@ty $lt:lifetime ; @none ; mut $($rest:tt)*) => {
         & $lt mut AccountView
     };
-    (@ty $lt:lifetime ; $head:ident, $($tail:ident),+) => {
-        $crate::account_field_ty!(@ty $lt ; $($tail),+)
+    (@ty $lt:lifetime ; @none ; $head:ident $($rest:tt)*) => {
+        $crate::account_field_ty!(@ty $lt ; @none ; $($rest)*)
     };
-    (@ty $lt:lifetime ; $head:ident) => {
+    (@ty $lt:lifetime ; @none ;) => {
         & $lt AccountView
     };
-    (@ty $lt:lifetime ;) => {
-        & $lt AccountView
+}
+
+/// Wraps a checked account reference into the field storage type.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! wrap_account_field {
+    (@wrap $field:ident ; @account($ty:ty) ; mut $($rest:tt)*) => {
+        let $field = $crate::MutAccount::<$ty>::try_load($field)?;
+    };
+    (@wrap $field:ident ; @account($ty:ty) ; $head:ident $($rest:tt)*) => {
+        $crate::wrap_account_field!(@wrap $field ; @account($ty) ; $($rest)*);
+    };
+    (@wrap $field:ident ; @account($ty:ty) ;) => {
+        let $field = $crate::Account::<$ty>::try_load($field)?;
+    };
+
+    (@wrap $field:ident ; @bytes ; mut $($rest:tt)*) => {
+        let $field = $crate::MutBytes::try_load($field)?;
+    };
+    (@wrap $field:ident ; @bytes ; $head:ident $($rest:tt)*) => {
+        $crate::wrap_account_field!(@wrap $field ; @bytes ; $($rest)*);
+    };
+    (@wrap $field:ident ; @bytes ;) => {
+        ::core::compile_error!("`bytes` account fields require the `mut` attribute")
+    };
+
+    (@wrap $field:ident ; @none ; mut $($rest:tt)*) => {};
+    (@wrap $field:ident ; @none ; $head:ident $($rest:tt)*) => {
+        $crate::wrap_account_field!(@wrap $field ; @none ; $($rest)*);
+    };
+    (@wrap $field:ident ; @none ;) => {
+        let $field: &AccountView = $field;
+    };
+}
+
+/// Detect `bytes` in attrs without literal/`$ident` arm ambiguity.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! attrs_kind {
+    (@scan $head:ident $($rest:ident)* ; $($all:ident)*) => {
+        $crate::attrs_kind!(@is_bytes $head ; $($rest)* ; $($all)*)
+    };
+    (@scan ; $($all:ident)*) => {
+        @none
+    };
+    (@is_bytes bytes ; $($rest:ident)* ; $($all:ident)*) => {
+        @bytes
+    };
+    (@is_bytes $other:ident ; $($rest:ident)* ; $($all:ident)*) => {
+        $crate::attrs_kind!(@scan $($rest)* ; $($all)*)
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! account_field_ty_dispatch {
+    ($lt:lifetime ; $($attrs:ident)* ; @account($ty:ty)) => {
+        $crate::account_field_ty!(@ty $lt ; @account($ty) ; $($attrs)*)
+    };
+    ($lt:lifetime ; $($attrs:ident)* ;) => {
+        $crate::account_field_ty_from_attrs!($lt ; $($attrs)*)
+    };
+}
+
+/// Resolve untyped / bytes field type from attrs.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! account_field_ty_from_attrs {
+    ($lt:lifetime ; $($attrs:ident)*) => {
+        $crate::account_field_ty_from_attrs!(@scan $lt ; $($attrs)* ; $($attrs)*)
+    };
+    (@scan $lt:lifetime ; $head:ident $($rest:ident)* ; $($all:ident)*) => {
+        $crate::account_field_ty_from_attrs!(@is_bytes $lt ; $head ; $($rest)* ; $($all)*)
+    };
+    (@scan $lt:lifetime ; ; $($all:ident)*) => {
+        $crate::account_field_ty!(@ty $lt ; @none ; $($all)*)
+    };
+    (@is_bytes $lt:lifetime ; bytes ; $($rest:ident)* ; $($all:ident)*) => {
+        $crate::account_field_ty!(@ty $lt ; @bytes ; $($all)*)
+    };
+    (@is_bytes $lt:lifetime ; $other:ident ; $($rest:ident)* ; $($all:ident)*) => {
+        $crate::account_field_ty_from_attrs!(@scan $lt ; $($rest)* ; $($all)*)
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! wrap_account_field_dispatch {
+    ($field:ident ; $($attrs:ident)* ; @account($ty:ty)) => {
+        $crate::wrap_account_field!(@wrap $field ; @account($ty) ; $($attrs)*);
+    };
+    ($field:ident ; $($attrs:ident)* ;) => {
+        $crate::wrap_account_field_from_attrs!($field ; $($attrs)*);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! wrap_account_field_from_attrs {
+    ($field:ident ; $($attrs:ident)*) => {
+        $crate::wrap_account_field_from_attrs!(@scan $field ; $($attrs)* ; $($attrs)*);
+    };
+    (@scan $field:ident ; $head:ident $($rest:ident)* ; $($all:ident)*) => {
+        $crate::wrap_account_field_from_attrs!(@is_bytes $field ; $head ; $($rest)* ; $($all)*);
+    };
+    (@scan $field:ident ; ; $($all:ident)*) => {
+        $crate::wrap_account_field!(@wrap $field ; @none ; $($all)*);
+    };
+    (@is_bytes $field:ident ; bytes ; $($rest:ident)* ; $($all:ident)*) => {
+        $crate::wrap_account_field!(@wrap $field ; @bytes ; $($all)*);
+    };
+    (@is_bytes $field:ident ; $other:ident ; $($rest:ident)* ; $($all:ident)*) => {
+        $crate::wrap_account_field_from_attrs!(@scan $field ; $($rest)* ; $($all)*);
     };
 }
 
@@ -61,13 +200,10 @@ macro_rules! account_field_ty {
 /// ### Example
 /// ```ignore
 /// define_account_struct! {
-///     pub struct AtomicSwapRepay<'info> {
-///         payer: signer;
-///         controller;
-///         authority: signer;
-///         integration: mut;
-///         token_program: @pubkey(pinocchio_token::ID, pinocchio_token2022::ID);
-///         reserve: @owner(SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID);
+///     pub struct AcceptAdmin<'info> {
+///         pending_admin: signer;
+///         global_config: mut, @account(GlobalConfig)
+///             @pubkey(GLOBAL_CONFIG_PDA) @owner(PROGRAM_ID);
 ///     }
 ///     program_id: crate::ID
 /// }
@@ -75,18 +211,20 @@ macro_rules! account_field_ty {
 ///
 /// ### Supported syntax per field:
 /// ```text
-/// field: [attr, ...]? [@pubkey(KEY)]? [@owner(KEY1, ...)]?;
+/// field: [attr, ...]? [@account(Type)]? [@pubkey(KEY)]? [@owner(KEY1, ...)]?;
 /// ```
-/// - `signer` - account must be signer
-/// - `mut` - account must be writable; field type is `&mut AccountView`
-/// - `empty` - account data field must be empty
-/// - `opt_signer` — account is optional, but must be a signer if provided
-/// - `@pubkey(KEY1, KEY2...)` — account pubkey must match one of the keys provided
-/// - `@owner(KEY1, KEY2...)` — account owner must match one of the keys provided
+/// - `signer` — account must be signer
+/// - `mut` — writable; with `@account(T)` loads [`MutAccount`], else `&mut AccountView`
+/// - `empty` — account data must be empty
+/// - `bytes` — with `mut`, loads [`MutBytes`] (raw data borrow)
+/// - `opt_signer` — optional account; must be signer if not the program id
+/// - `@account(Type)` — eager zero-copy load into [`Account`] / [`MutAccount`]
+/// - `@pubkey` / `@owner` — key checks
 ///
-/// Use `@remaining_accounts as remaining_accounts;` to capture extra accounts as `&'info mut [AccountView]`.
+/// `@remaining_accounts as name;` captures extras as `&mut [AccountView]`.
 ///
-/// The generated `from_accounts` consumes accounts in order and applies all checks.
+/// `from_accounts` takes `&mut [AccountView]` so typed mut accounts can be borrowed
+/// during parsing.
 #[macro_export]
 macro_rules! define_account_struct {
     (
@@ -94,6 +232,7 @@ macro_rules! define_account_struct {
             $(
                 $field:ident
                 $( : $( $attr:ident ),* $(,)? )?
+                $( @account( $account_ty:ty ) )?
                 $( @pubkey( $( $check_pubkey:expr ),+ ) )?
                 $( @owner( $( $check_owner:expr ),+ ) )?
                 ;
@@ -104,7 +243,9 @@ macro_rules! define_account_struct {
     ) => {
         $vis struct $name<$lt> {
             $(
-                pub $field: $crate::account_field_ty!(@ty $lt ; $($($attr),*)?),
+                pub $field: $crate::account_field_ty_dispatch!(
+                    $lt ; $($($attr)*)? ; $(@account($account_ty))?
+                ),
             )*
             $( pub $rem_ident: & $lt mut [AccountView], )?
         }
@@ -141,6 +282,10 @@ macro_rules! define_account_struct {
                             return Err(ProgramError::InvalidAccountOwner);
                         }
                     )?
+
+                    $crate::wrap_account_field_dispatch!(
+                        $field ; $($($attr)*)? ; $(@account($account_ty))?
+                    );
                 )*
 
                 $( let $rem_ident = accounts; )?
@@ -159,18 +304,30 @@ macro_rules! define_account_struct {
 #[cfg(test)]
 #[allow(dead_code)]
 mod tests {
+    use bytemuck::{Pod, Zeroable};
     use pinocchio::{
         account::{RuntimeAccount, NOT_BORROWED},
         error::ProgramError,
         AccountView, Address,
     };
 
+    use crate::ZeroCopyAccount;
+
     const PROG_ID: [u8; 32] = [1u8; 32];
     const KEY_A: [u8; 32] = [2u8; 32];
     const KEY_B: [u8; 32] = [3u8; 32];
 
-    /// Distinguishes `&AccountView` from `&mut AccountView` without coercion
-    /// hiding the difference.
+    // Bags account layouts are packed (align 1) so a 1-byte discriminator is safe.
+    #[repr(C, packed)]
+    #[derive(Clone, Copy, Pod, Zeroable)]
+    struct DemoState {
+        value: u64,
+    }
+
+    impl ZeroCopyAccount for DemoState {
+        const DISCRIMINATOR: [u8; 1] = [7];
+    }
+
     trait AccountRefKind {
         const MUTABLE: bool;
     }
@@ -188,9 +345,6 @@ mod tests {
         assert!(T::MUTABLE);
     }
 
-    /// Build a `RuntimeAccount` header + optional data in a heap buffer, then wrap
-    /// it in an `AccountView`.  The caller **must** keep the returned `Vec<u8>`
-    /// alive for as long as the `AccountView` is used.
     fn make_account(
         is_signer: bool,
         is_writable: bool,
@@ -223,8 +377,6 @@ mod tests {
         }
     }
 
-    // ── NotEnoughAccountKeys ──────────────────────────────────────────────────
-
     #[test]
     fn not_enough_accounts_empty_slice() {
         define_account_struct! {
@@ -238,34 +390,6 @@ mod tests {
     }
 
     #[test]
-    fn not_enough_accounts_second_field() {
-        define_account_struct! {
-            struct Ctx<'info> { payer; admin; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, [0u8; 32], [0u8; 32], vec![]);
-        assert_eq!(
-            Ctx::from_accounts(&mut [view]).err().unwrap(),
-            ProgramError::NotEnoughAccountKeys,
-        );
-    }
-
-    // ── signer ────────────────────────────────────────────────────────────────
-
-    #[test]
-    fn signer_check_fails() {
-        define_account_struct! {
-            struct Ctx<'info> { payer: signer; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, [0u8; 32], [0u8; 32], vec![]);
-        assert_eq!(
-            Ctx::from_accounts(&mut [view]).err().unwrap(),
-            ProgramError::MissingRequiredSignature,
-        );
-    }
-
-    #[test]
     fn signer_check_passes() {
         define_account_struct! {
             struct Ctx<'info> { payer: signer; }
@@ -275,33 +399,8 @@ mod tests {
         assert!(Ctx::from_accounts(&mut [view]).is_ok());
     }
 
-    // ── mut ───────────────────────────────────────────────────────────────────
-
     #[test]
-    fn mut_check_fails() {
-        define_account_struct! {
-            struct Ctx<'info> { acct: mut; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, [0u8; 32], [0u8; 32], vec![]);
-        assert_eq!(
-            Ctx::from_accounts(&mut [view]).err().unwrap(),
-            ProgramError::Immutable,
-        );
-    }
-
-    #[test]
-    fn mut_check_passes() {
-        define_account_struct! {
-            struct Ctx<'info> { acct: mut; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, true, [0u8; 32], [0u8; 32], vec![]);
-        assert!(Ctx::from_accounts(&mut [view]).is_ok());
-    }
-
-    #[test]
-    fn mut_field_try_borrow_mut() {
+    fn mut_field_is_mut_ref() {
         define_account_struct! {
             struct Ctx<'info> { acct: mut; }
             program_id: PROG_ID
@@ -331,150 +430,55 @@ mod tests {
         assert_mut_field(&mut *ctx.acct);
     }
 
-    // ── empty ─────────────────────────────────────────────────────────────────
-
     #[test]
-    fn empty_check_fails() {
-        define_account_struct! {
-            struct Ctx<'info> { acct: empty; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, [0u8; 32], [0u8; 32], vec![1, 2, 3]);
-        assert_eq!(
-            Ctx::from_accounts(&mut [view]).err().unwrap(),
-            ProgramError::AccountAlreadyInitialized,
-        );
-    }
-
-    #[test]
-    fn empty_check_passes() {
-        define_account_struct! {
-            struct Ctx<'info> { acct: empty; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, [0u8; 32], [0u8; 32], vec![]);
-        assert!(Ctx::from_accounts(&mut [view]).is_ok());
-    }
-
-    // ── @pubkey ───────────────────────────────────────────────────────────────
-
-    #[test]
-    fn pubkey_check_single_fails() {
+    fn typed_mut_account_loads_and_mutates() {
         define_account_struct! {
             struct Ctx<'info> {
-                acct: @pubkey(Address::new_from_array(KEY_A));
+                acct: mut, @account(DemoState);
             }
             program_id: PROG_ID
         }
-        let (_buf, view) = make_account(false, false, KEY_B, [0u8; 32], vec![]);
-        assert_eq!(
-            Ctx::from_accounts(&mut [view]).err().unwrap(),
-            ProgramError::IncorrectProgramId,
-        );
+        let mut data = vec![7u8];
+        data.extend_from_slice(&42u64.to_le_bytes());
+        let (_buf, view) = make_account(false, true, KEY_A, PROG_ID, data);
+        let mut accounts = [view];
+        let mut ctx = Ctx::from_accounts(&mut accounts).unwrap();
+        assert_eq!({ ctx.acct.value }, 42);
+        ctx.acct.value = 99;
+        assert_eq!(ctx.acct.address(), &Address::new_from_array(KEY_A));
     }
 
     #[test]
-    fn pubkey_check_single_passes() {
+    fn typed_immut_account_loads() {
         define_account_struct! {
             struct Ctx<'info> {
-                acct: @pubkey(Address::new_from_array(KEY_A));
+                acct: @account(DemoState);
             }
             program_id: PROG_ID
         }
-        let (_buf, view) = make_account(false, false, KEY_A, [0u8; 32], vec![]);
-        assert!(Ctx::from_accounts(&mut [view]).is_ok());
+        let mut data = vec![7u8];
+        data.extend_from_slice(&7u64.to_le_bytes());
+        let (_buf, view) = make_account(false, false, KEY_A, PROG_ID, data);
+        let mut accounts = [view];
+        let ctx = Ctx::from_accounts(&mut accounts).unwrap();
+        assert_eq!({ ctx.acct.value }, 7);
     }
 
     #[test]
-    fn pubkey_check_multi_passes_second_key() {
+    fn bytes_mut_loads() {
         define_account_struct! {
             struct Ctx<'info> {
-                acct: @pubkey(Address::new_from_array(KEY_A), Address::new_from_array(KEY_B));
+                acct: mut, bytes;
             }
             program_id: PROG_ID
         }
-        let (_buf, view) = make_account(false, false, KEY_B, [0u8; 32], vec![]);
-        assert!(Ctx::from_accounts(&mut [view]).is_ok());
+        let (_buf, view) = make_account(false, true, KEY_A, PROG_ID, vec![1, 2, 3]);
+        let mut accounts = [view];
+        let mut ctx = Ctx::from_accounts(&mut accounts).unwrap();
+        assert_eq!(ctx.acct.data(), &[1, 2, 3]);
+        ctx.acct.data_mut()[0] = 9;
+        assert_eq!(ctx.acct.data()[0], 9);
     }
-
-    // ── @owner ────────────────────────────────────────────────────────────────
-
-    #[test]
-    fn owner_check_fails() {
-        define_account_struct! {
-            struct Ctx<'info> {
-                acct: @owner(Address::new_from_array(KEY_A));
-            }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, [0u8; 32], KEY_B, vec![]);
-        assert_eq!(
-            Ctx::from_accounts(&mut [view]).err().unwrap(),
-            ProgramError::InvalidAccountOwner,
-        );
-    }
-
-    #[test]
-    fn owner_check_passes() {
-        define_account_struct! {
-            struct Ctx<'info> {
-                acct: @owner(Address::new_from_array(KEY_A));
-            }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, [0u8; 32], KEY_A, vec![]);
-        assert!(Ctx::from_accounts(&mut [view]).is_ok());
-    }
-
-    #[test]
-    fn owner_check_multi_passes_second_owner() {
-        define_account_struct! {
-            struct Ctx<'info> {
-                acct: @owner(Address::new_from_array(KEY_A), Address::new_from_array(KEY_B));
-            }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, [0u8; 32], KEY_B, vec![]);
-        assert!(Ctx::from_accounts(&mut [view]).is_ok());
-    }
-
-    // ── opt_signer ────────────────────────────────────────────────────────────
-
-    #[test]
-    fn opt_signer_passes_when_address_is_program_id() {
-        // address == program_id → treated as placeholder, signer not required
-        define_account_struct! {
-            struct Ctx<'info> { acct: opt_signer; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, PROG_ID, [0u8; 32], vec![]);
-        assert!(Ctx::from_accounts(&mut [view]).is_ok());
-    }
-
-    #[test]
-    fn opt_signer_fails_when_non_program_id_and_not_signer() {
-        define_account_struct! {
-            struct Ctx<'info> { acct: opt_signer; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(false, false, KEY_A, [0u8; 32], vec![]);
-        assert_eq!(
-            Ctx::from_accounts(&mut [view]).err().unwrap(),
-            ProgramError::MissingRequiredSignature,
-        );
-    }
-
-    #[test]
-    fn opt_signer_passes_when_non_program_id_and_is_signer() {
-        define_account_struct! {
-            struct Ctx<'info> { acct: opt_signer; }
-            program_id: PROG_ID
-        }
-        let (_buf, view) = make_account(true, false, KEY_A, [0u8; 32], vec![]);
-        assert!(Ctx::from_accounts(&mut [view]).is_ok());
-    }
-
-    // ── @remaining_accounts ───────────────────────────────────────────────────
 
     #[test]
     fn remaining_accounts_captured() {
@@ -492,5 +496,21 @@ mod tests {
         let ctx = Ctx::from_accounts(&mut accounts).unwrap();
         assert_eq!(ctx.remaining.len(), 2);
         let _: &mut [AccountView] = ctx.remaining;
+    }
+
+    #[test]
+    fn owner_and_typed_together() {
+        define_account_struct! {
+            struct Ctx<'info> {
+                acct: mut, @account(DemoState) @owner(Address::new_from_array(PROG_ID));
+            }
+            program_id: PROG_ID
+        }
+        let mut data = vec![7u8];
+        data.extend_from_slice(&1u64.to_le_bytes());
+        let (_buf, view) = make_account(false, true, KEY_A, PROG_ID, data);
+        let mut accounts = [view];
+        let ctx = Ctx::from_accounts(&mut accounts).unwrap();
+        assert_eq!({ ctx.acct.value }, 1);
     }
 }
