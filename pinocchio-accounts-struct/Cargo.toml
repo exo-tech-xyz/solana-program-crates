@@ -11,4 +11,5 @@ license.workspace = true
 pinocchio-log = { workspace = true }
 
 [dependencies]
+bytemuck = { workspace = true, features = ["derive"] }
 pinocchio = { workspace = true }

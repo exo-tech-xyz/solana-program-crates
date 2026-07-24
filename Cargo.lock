@@ -1039,6 +1039,7 @@ dependencies = [
 name = "exo-pinocchio-accounts-struct"
 version = "0.1.0-rc.2"
 dependencies = [
+ "bytemuck",
  "pinocchio",
  "pinocchio-log",
 ]
