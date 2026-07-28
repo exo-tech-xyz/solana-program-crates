@@ -30,5 +30,5 @@ spl-token-2022-interface = "3.0.1"
 spl-token-group-interface = "0.7.2"
 spl-token-metadata-interface = "1.0.0"
 spl-type-length-value = "0.9.1"
-exo-spl-token-litesvm = { path = "./spl-token-litesvm", version = "0.1.0-rc.1" }
+exo-spl-token-litesvm = { path = "./spl-token-litesvm", version = "0.2.0" }
 uint = "0.10.0"
